@@ -106,8 +106,6 @@ class ScriptRunner(QThread):
                     self.finished.emit(self.script, proc.returncode)
                     return
                 else:
-                    # Fallback: use os.system (can't track)
-                    import os
                     cmd = f'cosmic-term -- bash -c \'{inner_cmd}\''
                     logging.debug(f"No terminal found, using os.system fallback: {cmd}")
                     os.system(cmd + ' &')
@@ -343,20 +341,24 @@ class ScriptLauncherApp(QMainWindow):
         logging.debug(f"Toggled shell mode for {script}: {self.shell_modes[script]}")
     
     def get_script_interpreter(self, script_path):
+        try:
+            with open(script_path, 'r') as file:
+                first_line = file.readline().strip()
+                if first_line.startswith('#!/bin/bash'):
+                    return ['/bin/bash']
+                elif first_line.startswith('#!/bin/sh'):
+                    return ['/bin/sh']
+                elif first_line.startswith('#!/bin/zsh') or first_line.startswith('#!/usr/bin/zsh'):
+                    return ['/bin/zsh']
+                elif first_line.startswith('#!') and 'python' in first_line:
+                    return [sys.executable, '-u']
+        except Exception as e:
+            logging.warning(f"Could not read shebang for {script_path}: {str(e)}")
+
         if script_path.lower().endswith('.py'):
             return [sys.executable, '-u']
-        elif script_path.lower().endswith('.sh'):
+        elif script_path.lower().endswith(('.sh', '.bash')):
             return ['/bin/bash']
-        else:
-            try:
-                with open(script_path, 'r') as file:
-                    first_line = file.readline().strip()
-                    if first_line.startswith('#!/bin/bash') or first_line.startswith('#!/bin/sh'):
-                        return ['/bin/bash']
-                    elif first_line.startswith('#!') and 'python' in first_line:
-                        return [sys.executable, '-u']
-            except Exception as e:
-                logging.warning(f"Could not read shebang for {script_path}: {str(e)}")
         return [sys.executable, '-u']
     
     def run_scripts(self):
