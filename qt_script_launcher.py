@@ -183,14 +183,15 @@ class ScriptLauncherApp(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Script Command", "Description", "Status", "Shell"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setColumnWidth(2, 100)
         self.table.setColumnWidth(3, 60)
+        self.table.itemDoubleClicked.connect(self.run_selected_on_double_click)
         self.layout.addWidget(self.table)
         
         self.button_frame = QWidget()
@@ -373,6 +374,12 @@ class ScriptLauncherApp(QMainWindow):
             script = self.table.item(row, 0).text().split()[0]
             if self.statuses.get(script) == "Stop" and os.path.exists(script):
                 self.run_script(script)
+    
+    def run_selected_on_double_click(self, item):
+        row = item.row()
+        script = self.table.item(row, 0).text().split()[0]
+        if self.statuses.get(script) == "Stop" and os.path.exists(script):
+            self.run_script(script)
     
     def run_script(self, script):
         try:
