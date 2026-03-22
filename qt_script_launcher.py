@@ -519,8 +519,99 @@ class ScriptLauncherApp(QMainWindow):
         except Exception as e:
             logging.error(f"Error quitting application: {str(e)}")
 
+HACKER_STYLESHEET = """
+QMainWindow, QWidget {
+    background-color: #0d0d0d;
+    color: #00ff41;
+}
+QLabel {
+    color: #00ff41;
+    background-color: transparent;
+}
+QPushButton {
+    background-color: #1a1a1a;
+    color: #00ff41;
+    border: 1px solid #00ff41;
+    padding: 6px 12px;
+    border-radius: 3px;
+}
+QPushButton:hover {
+    background-color: #003b00;
+    border: 2px solid #00ff41;
+}
+QPushButton:pressed {
+    background-color: #004d00;
+}
+QTableWidget, QTableView {
+    background-color: #0d0d0d;
+    color: #00ff41;
+    gridline-color: #003b00;
+    border: 1px solid #00ff41;
+    selection-background-color: #003b00;
+    selection-color: #00ff41;
+}
+QHeaderView::section {
+    background-color: #1a1a1a;
+    color: #00ff41;
+    border: 1px solid #00ff41;
+    padding: 4px;
+}
+QScrollBar:vertical {
+    background: #0d0d0d;
+    width: 12px;
+    border: 1px solid #003b00;
+}
+QScrollBar::handle:vertical {
+    background: #003b00;
+    min-height: 20px;
+    border: 1px solid #00ff41;
+}
+QScrollBar::handle:vertical:hover {
+    background: #004d00;
+}
+QScrollBar:horizontal {
+    background: #0d0d0d;
+    height: 12px;
+    border: 1px solid #003b00;
+}
+QScrollBar::handle:horizontal {
+    background: #003b00;
+    min-width: 20px;
+    border: 1px solid #00ff41;
+}
+QCheckBox {
+    color: #00ff41;
+    background-color: transparent;
+}
+QCheckBox::indicator {
+    border: 1px solid #00ff41;
+    background-color: #0d0d0d;
+}
+QCheckBox::indicator:checked {
+    background-color: #00ff41;
+    border-color: #00ff41;
+}
+QStatusBar {
+    background-color: #0d0d0d;
+    color: #00ff41;
+    border-top: 1px solid #003b00;
+}
+QSystemTrayIcon {
+    background-color: #0d0d0d;
+}
+QMenu {
+    background-color: #1a1a1a;
+    color: #00ff41;
+    border: 1px solid #00ff41;
+}
+QMenu::item:selected {
+    background-color: #003b00;
+}
+"""
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyleSheet(HACKER_STYLESHEET)
     window = ScriptLauncherApp()
     
     if not window.args.minimize:
