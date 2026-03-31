@@ -9,7 +9,7 @@ import argparse
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
                              QFileDialog, QMessageBox, QCheckBox, QSystemTrayIcon, QMenu,
-                             QAbstractItemView)
+                             QAbstractItemView, QLineEdit)
 from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QObject, QThread
 from PyQt6.QtGui import QIcon, QAction, QColor, QPixmap
 
@@ -20,13 +20,14 @@ class ScriptRunner(QThread):
     error = pyqtSignal(str, str)
     started_process = pyqtSignal(str, int)  # Emit PID when process starts
     
-    def __init__(self, script, interpreter, params, use_shell, script_dir):
+    def __init__(self, script, interpreter, params, use_shell, script_dir, venv_path=None):
         super().__init__()
         self.script = script
         self.interpreter = interpreter
         self.params = params
         self.use_shell = use_shell
         self.script_dir = script_dir
+        self.venv_path = venv_path
         self.process = None
     
     def run(self):
@@ -119,11 +120,15 @@ class ScriptRunner(QThread):
                 stderr_file = os.path.join(log_dir, f"{script_name}_stderr.log")
                 
                 with open(stdout_file, 'w') as stdout_f, open(stderr_file, 'w') as stderr_f:
+                    env = os.environ.copy()
+                    if self.venv_path:
+                        env['VIRTUAL_ENV'] = self.venv_path
                     self.process = subprocess.Popen(
                         self.interpreter + [self.script] + self.params,
                         stdout=stdout_f,
                         stderr=stderr_f,
-                        cwd=self.script_dir
+                        cwd=self.script_dir,
+                        env=env
                     )
                     self.started_process.emit(self.script, self.process.pid)
                     self.process.wait()
@@ -169,7 +174,10 @@ class ScriptLauncherApp(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         
-        self.file_label = QLabel("No file selected")
+        self.file_label = QLineEdit("No file selected")
+        self.file_label.setReadOnly(True)
+        self.file_label.setCursorPosition(0)
+        self.file_label.mouseDoubleClickEvent = self.open_file_on_double_click
         self.layout.addWidget(self.file_label)
         
         self.select_button = QPushButton("Select Script File")
@@ -275,6 +283,11 @@ class ScriptLauncherApp(QMainWindow):
         if file_path:
             self.load_file(file_path)
     
+    def open_file_on_double_click(self, event):
+        file_path = self.file_label.text()
+        if file_path and file_path != "No file selected" and os.path.exists(file_path):
+            subprocess.Popen(['xdg-open', file_path])
+    
     def load_file(self, file_path):
         if not os.path.isfile(file_path) or not file_path.lower().endswith('.txt'):
             logging.error(f"Invalid file path or not a .txt file: {file_path}")
@@ -341,26 +354,42 @@ class ScriptLauncherApp(QMainWindow):
             self.shell_modes[script] = (state == Qt.CheckState.Checked)
         logging.debug(f"Toggled shell mode for {script}: {self.shell_modes[script]}")
     
-    def get_script_interpreter(self, script_path):
+    def get_script_interpreter(self, script_path, script_dir):
         try:
             with open(script_path, 'r') as file:
                 first_line = file.readline().strip()
                 if first_line.startswith('#!/bin/bash'):
-                    return ['/bin/bash']
+                    return ['/bin/bash'], None
                 elif first_line.startswith('#!/bin/sh'):
-                    return ['/bin/sh']
+                    return ['/bin/sh'], None
                 elif first_line.startswith('#!/bin/zsh') or first_line.startswith('#!/usr/bin/zsh'):
-                    return ['/bin/zsh']
+                    return ['/bin/zsh'], None
                 elif first_line.startswith('#!') and 'python' in first_line:
-                    return [sys.executable, '-u']
+                    interpreter = [sys.executable, '-u']
         except Exception as e:
             logging.warning(f"Could not read shebang for {script_path}: {str(e)}")
+            interpreter = None
 
         if script_path.lower().endswith('.py'):
-            return [sys.executable, '-u']
+            interpreter = [sys.executable, '-u']
         elif script_path.lower().endswith(('.sh', '.bash')):
-            return ['/bin/bash']
-        return [sys.executable, '-u']
+            return ['/bin/bash'], None
+        else:
+            interpreter = [sys.executable, '-u']
+
+        venv_path = None
+        if interpreter and 'python' in interpreter[0].lower():
+            if os.name == 'nt':
+                venv_python = os.path.join(script_dir, 'venv', 'Scripts', 'python.exe')
+                venv_path = os.path.join(script_dir, 'venv')
+            else:
+                venv_python = os.path.join(script_dir, 'venv', 'bin', 'python')
+                venv_path = os.path.join(script_dir, 'venv')
+            if os.path.exists(venv_python):
+                logging.debug(f"Using venv Python: {venv_python}")
+                return [venv_python] + interpreter[1:], venv_path
+
+        return interpreter, None
     
     def run_scripts(self):
         logging.debug(f"Running all scripts. Current processes: {list(self.processes.keys())}")
@@ -384,12 +413,12 @@ class ScriptLauncherApp(QMainWindow):
     def run_script(self, script):
         try:
             self.update_status(script, "Running")
-            interpreter = self.get_script_interpreter(script)
+            script_dir = os.path.dirname(os.path.abspath(script))
+            interpreter, venv_path = self.get_script_interpreter(script, script_dir)
             params = self.parameters.get(script, [])
             use_shell = self.shell_modes.get(script, False)
-            script_dir = os.path.dirname(os.path.abspath(script))
             
-            thread = ScriptRunner(script, interpreter, params, use_shell, script_dir)
+            thread = ScriptRunner(script, interpreter, params, use_shell, script_dir, venv_path)
             thread.finished.connect(lambda s, rc: self.script_finished(s, rc))
             thread.error.connect(lambda s, e: self.script_error(s, e))
             thread.started_process.connect(self.on_process_started)
@@ -397,7 +426,7 @@ class ScriptLauncherApp(QMainWindow):
             
             self.threads[script] = thread
             self.processes[script] = True
-            logging.debug(f"Started script: {script}, Interpreter: {interpreter}, Params: {params}")
+            logging.debug(f"Started script: {script}, Interpreter: {interpreter}, venv: {venv_path}, Params: {params}")
         except Exception as e:
             self.update_status(script, f"Stop (Error: {str(e)})")
             logging.error(f"Error running script {script}: {str(e)}")
@@ -536,6 +565,14 @@ QMainWindow, QWidget {
 QLabel {
     color: #00ff41;
     background-color: transparent;
+}
+QLineEdit {
+    color: #00ff41;
+    background-color: #1a1a1a;
+    border: 1px solid #00ff41;
+    padding: 4px;
+    selection-background-color: #003b00;
+    selection-color: #00ff41;
 }
 QPushButton {
     background-color: #1a1a1a;

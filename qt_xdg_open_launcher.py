@@ -9,7 +9,7 @@ import argparse
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
                              QFileDialog, QMessageBox, QScrollArea, QFrame, QSystemTrayIcon,
-                             QMenu, QHeaderView)
+                             QMenu, QHeaderView, QLineEdit)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSettings
 from PyQt6.QtGui import QIcon, QAction, QPainter, QColor, QPixmap
 
@@ -49,7 +49,10 @@ class URLLauncherXDGApp(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
         
-        self.file_label = QLabel("No file selected")
+        self.file_label = QLineEdit("No file selected")
+        self.file_label.setReadOnly(True)
+        self.file_label.setCursorPosition(0)
+        self.file_label.mouseDoubleClickEvent = self.open_file_on_double_click
         self.layout.addWidget(self.file_label)
         
         self.select_button = QPushButton("Select File")
@@ -135,6 +138,11 @@ class URLLauncherXDGApp(QMainWindow):
         )
         if file_path:
             self.load_file(file_path)
+    
+    def open_file_on_double_click(self, event):
+        file_path = self.file_label.text()
+        if file_path and file_path != "No file selected" and os.path.exists(file_path):
+            subprocess.Popen(['xdg-open', file_path])
     
     def load_file(self, file_path):
         if not os.path.isfile(file_path) or not file_path.lower().endswith('.txt'):
@@ -299,6 +307,14 @@ QMainWindow, QWidget {
 QLabel {
     color: #00ff41;
     background-color: transparent;
+}
+QLineEdit {
+    color: #00ff41;
+    background-color: #1a1a1a;
+    border: 1px solid #00ff41;
+    padding: 4px;
+    selection-background-color: #003b00;
+    selection-color: #00ff41;
 }
 QPushButton {
     background-color: #1a1a1a;
