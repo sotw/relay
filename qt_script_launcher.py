@@ -33,13 +33,17 @@ class ScriptRunner(QThread):
     def run(self):
         try:
             if self.use_shell:
-                # Build the command properly
                 script_cmd = f'"{self.script}"'
                 if self.params:
                     script_cmd += ' ' + ' '.join([f'"{p}"' for p in self.params])
                 
                 # The inner command to run in bash
-                inner_cmd = f'cd "{self.script_dir}" && {self.interpreter[0]} {script_cmd}; echo "Press Enter to close..."; read'
+                interpreter_cmd = ' '.join(self.interpreter)
+                if self.venv_path:
+                    bin_dir = os.path.join(self.venv_path, 'bin')
+                    inner_cmd = f'cd "{self.script_dir}" && export PATH="{bin_dir}:$PATH" && export VIRTUAL_ENV="{self.venv_path}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
+                else:
+                    inner_cmd = f'cd "{self.script_dir}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
                 
                 # Try cosmic-term first, then x-terminal-emulator
                 found_term = None
@@ -123,6 +127,7 @@ class ScriptRunner(QThread):
                     env = os.environ.copy()
                     if self.venv_path:
                         env['VIRTUAL_ENV'] = self.venv_path
+                        env['PATH'] = os.path.join(self.venv_path, 'bin') + os.pathsep + env.get('PATH', '')
                     self.process = subprocess.Popen(
                         self.interpreter + [self.script] + self.params,
                         stdout=stdout_f,
@@ -355,6 +360,26 @@ class ScriptLauncherApp(QMainWindow):
         logging.debug(f"Toggled shell mode for {script}: {self.shell_modes[script]}")
     
     def get_script_interpreter(self, script_path, script_dir):
+        ext = os.path.splitext(script_path)[1].lower()
+
+        if ext in ('.sh', '.bash'):
+            return ['/bin/bash'], None
+
+        if ext in ('.py', '.pyw'):
+            for venv_name in ('venv', '.venv'):
+                if os.name == 'nt':
+                    venv_python = os.path.join(script_dir, venv_name, 'Scripts', 'python.exe')
+                    venv_dir = os.path.join(script_dir, venv_name)
+                else:
+                    venv_python = os.path.join(script_dir, venv_name, 'bin', 'python')
+                    venv_dir = os.path.join(script_dir, venv_name)
+                if os.path.exists(venv_python):
+                    logging.debug(f"Using venv Python: {venv_python}")
+                    return [venv_python, '-u'], venv_dir
+
+            logging.warning(f"No venv found at {script_dir}/venv or {script_dir}/.venv. Using system python.")
+            return [sys.executable, '-u'], None
+
         try:
             with open(script_path, 'r') as file:
                 first_line = file.readline().strip()
@@ -364,32 +389,10 @@ class ScriptLauncherApp(QMainWindow):
                     return ['/bin/sh'], None
                 elif first_line.startswith('#!/bin/zsh') or first_line.startswith('#!/usr/bin/zsh'):
                     return ['/bin/zsh'], None
-                elif first_line.startswith('#!') and 'python' in first_line:
-                    interpreter = [sys.executable, '-u']
         except Exception as e:
             logging.warning(f"Could not read shebang for {script_path}: {str(e)}")
-            interpreter = None
 
-        if script_path.lower().endswith('.py'):
-            interpreter = [sys.executable, '-u']
-        elif script_path.lower().endswith(('.sh', '.bash')):
-            return ['/bin/bash'], None
-        else:
-            interpreter = [sys.executable, '-u']
-
-        venv_path = None
-        if interpreter and 'python' in interpreter[0].lower():
-            if os.name == 'nt':
-                venv_python = os.path.join(script_dir, 'venv', 'Scripts', 'python.exe')
-                venv_path = os.path.join(script_dir, 'venv')
-            else:
-                venv_python = os.path.join(script_dir, 'venv', 'bin', 'python')
-                venv_path = os.path.join(script_dir, 'venv')
-            if os.path.exists(venv_python):
-                logging.debug(f"Using venv Python: {venv_python}")
-                return [venv_python] + interpreter[1:], venv_path
-
-        return interpreter, None
+        return [sys.executable, '-u'], None
     
     def run_scripts(self):
         logging.debug(f"Running all scripts. Current processes: {list(self.processes.keys())}")
