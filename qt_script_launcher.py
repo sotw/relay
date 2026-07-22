@@ -15,6 +15,9 @@ from PyQt6.QtGui import QIcon, QAction, QColor, QPixmap
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def cosmic_term_title_cmd(title):
+    return f"printf '\\033]0;{title}\\007'"
+
 class ScriptRunner(QThread):
     finished = pyqtSignal(str, int)
     error = pyqtSignal(str, str)
@@ -37,13 +40,13 @@ class ScriptRunner(QThread):
                 if self.params:
                     script_cmd += ' ' + ' '.join([f'"{p}"' for p in self.params])
                 
-                # The inner command to run in bash
                 interpreter_cmd = ' '.join(self.interpreter)
+                title_cmd = cosmic_term_title_cmd(os.path.basename(self.script))
                 if self.venv_path:
                     bin_dir = os.path.join(self.venv_path, 'bin')
-                    inner_cmd = f'cd "{self.script_dir}" && export PATH="{bin_dir}:$PATH" && export VIRTUAL_ENV="{self.venv_path}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
+                    inner_cmd = f'{title_cmd} && cd "{self.script_dir}" && export PATH="{bin_dir}:$PATH" && export VIRTUAL_ENV="{self.venv_path}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
                 else:
-                    inner_cmd = f'cd "{self.script_dir}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
+                    inner_cmd = f'{title_cmd} && cd "{self.script_dir}" && {interpreter_cmd} {script_cmd}; echo "Press Enter to close..."; read'
                 
                 # Try cosmic-term first, then x-terminal-emulator
                 found_term = None
